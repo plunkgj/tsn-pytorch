@@ -1,4 +1,4 @@
-# Changes in the fork:
+# Changes in this fork:
 This fork was created to migrate the TSN-Pytorch code to torch 1.0, and to operate on the synthetic SimulatedHome dataset.
 ## Main changes:
 - Currently tested and working for the BNInception convolutional model.
@@ -6,6 +6,8 @@ This fork was created to migrate the TSN-Pytorch code to torch 1.0, and to opera
 - Migrated from Torch0.1 to Torch1.0.
 - Convolution models besides BNInception not tested.
 - README from origial repository reproduced below:
+
+-------------------------------------------------------------
 
 # TSN-Pytorch
 
