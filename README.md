@@ -1,3 +1,12 @@
+# Changes in the fork:
+This fork was created to migrate the TSN-Pytorch code to torch 1.0, and to operate on the synthetic SimulatedHome dataset.
+## Main changes:
+- Currently tested and working for the BNInception convolutional model.
+- Changed the model from using 2 greyscale flow images to a single RGB image. Optical flow is output by Unity's ML-Synthesis package, which encodes X and Y flow in a single RGB image. 
+- Migrated from Torch0.1 to Torch1.0.
+- Convolution models besides BNInception not tested.
+- README from origial repository reproduced below:
+
 # TSN-Pytorch
 
 *Now in experimental release, suggestions welcome*.
