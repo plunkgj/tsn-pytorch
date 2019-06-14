@@ -26,7 +26,7 @@ class VideoRecord(object):
 class TSNDataSet(data.Dataset):
     def __init__(self, root_path, list_file,
                  num_segments=3, new_length=1, modality='RGB',
-                 image_tmpl='img_{:05d}.jpg', transform=None,
+                 image_tmpl='{:05d}_img.jpg', transform=None,
                  force_grayscale=False, random_shift=True, test_mode=False):
 
         self.root_path = root_path
@@ -46,16 +46,23 @@ class TSNDataSet(data.Dataset):
 
     def _load_image(self, directory, idx):
         if self.modality == 'RGB' or self.modality == 'RGBDiff':
-            return [Image.open(os.path.join(directory, self.image_tmpl.format(idx))).convert('RGB')]
-        elif self.modality == 'Flow':
-            x_img = Image.open(os.path.join(directory, self.image_tmpl.format('x', idx))).convert('L')
-            y_img = Image.open(os.path.join(directory, self.image_tmpl.format('y', idx))).convert('L')
+            img = Image.open(os.path.join(directory, self.image_tmpl.format(idx)))
+            img = img.convert('RGB').resize((320, 240))
+            return [img]
 
-            return [x_img, y_img]
+        # Changed to input optical flow as RGB ->
+        # all flow information encoded using RGB by Unity's ML-Syntehsis package
+        elif self.modality == 'Flow':
+            img = Image.open(os.path.join(directory, self.image_tmpl.format(idx)))
+            img = img.convert('RGB').resize((320, 240))
+            return [img]
 
     def _parse_list(self):
         self.video_list = [VideoRecord(x.strip().split(' ')) for x in open(self.list_file)]
 
+
+    # picks random valid video positions to start from
+    # FLAG need to come back to this to understand better
     def _sample_indices(self, record):
         """
 
@@ -98,17 +105,20 @@ class TSNDataSet(data.Dataset):
 
         return self.get(record, segment_indices)
 
+    # Get frames starting at frame index. If RGB, only gets the only frame, flow gets 5
     def get(self, record, indices):
 
         images = list()
+        
         for seg_ind in indices:
             p = int(seg_ind)
             for i in range(self.new_length):
-                seg_imgs = self._load_image(record.path, p)
+                seg_imgs = self._load_image(self.root_path+record.path, p)
                 images.extend(seg_imgs)
                 if p < record.num_frames:
                     p += 1
 
+        # transform images into final Model input representation and return                
         process_data = self.transform(images)
         return process_data, record.label
 

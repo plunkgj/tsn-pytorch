@@ -40,11 +40,15 @@ TSN Configurations:
 
         feature_dim = self._prepare_tsn(num_class)
 
+        # FLAG our optical flow is encoded in RGB, don't need to replace input here
+
         if self.modality == 'Flow':
-            print("Converting the ImageNet model to a flow init model")
+            print("Converting the base CNN model to a flow init model")
             self.base_model = self._construct_flow_model(self.base_model)
             print("Done. Flow model ready...")
-        elif self.modality == 'RGBDiff':
+
+        
+        if self.modality == 'RGBDiff':
             print("Converting the ImageNet model to RGB+Diff init model")
             self.base_model = self._construct_diff_model(self.base_model)
             print("Done. RGBDiff model ready.")
@@ -188,7 +192,8 @@ TSN Configurations:
         ]
 
     def forward(self, input):
-        sample_len = (3 if self.modality == "RGB" else 2) * self.new_length
+        #sample_len = (3 if self.modality == "RGB" else 2) * self.new_length
+        sample_len = 3 * self.new_length
 
         if self.modality == 'RGBDiff':
             sample_len = 3 * self.new_length
@@ -208,7 +213,7 @@ TSN Configurations:
         return output.squeeze(1)
 
     def _get_diff(self, input, keep_rgb=False):
-        input_c = 3 if self.modality in ["RGB", "RGBDiff"] else 2
+        input_c = 3 #if self.modality in ["RGB", "RGBDiff"] else 2
         input_view = input.view((-1, self.num_segments, self.new_length + 1, input_c,) + input.size()[2:])
         if keep_rgb:
             new_data = input_view.clone()
@@ -236,10 +241,10 @@ TSN Configurations:
         # modify parameters, assume the first blob contains the convolution kernels
         params = [x.clone() for x in conv_layer.parameters()]
         kernel_size = params[0].size()
-        new_kernel_size = kernel_size[:1] + (2 * self.new_length, ) + kernel_size[2:]
+        new_kernel_size = kernel_size[:1] + (3 * self.new_length, ) + kernel_size[2:]
         new_kernels = params[0].data.mean(dim=1, keepdim=True).expand(new_kernel_size).contiguous()
 
-        new_conv = nn.Conv2d(2 * self.new_length, conv_layer.out_channels,
+        new_conv = nn.Conv2d(3 * self.new_length, conv_layer.out_channels,
                              conv_layer.kernel_size, conv_layer.stride, conv_layer.padding,
                              bias=True if len(params) == 2 else False)
         new_conv.weight.data = new_kernels

@@ -14,6 +14,8 @@ from models import TSN
 from transforms import *
 from opts import parser
 
+import gc # used to check currently allocated tensors
+
 best_prec1 = 0
 
 
@@ -27,6 +29,8 @@ def main():
         num_class = 51
     elif args.dataset == 'kinetics':
         num_class = 400
+    elif args.dataset == 'syn_home':
+        num_class = 2
     else:
         raise ValueError('Unknown dataset '+args.dataset)
 
@@ -44,6 +48,9 @@ def main():
     model = torch.nn.DataParallel(model, device_ids=args.gpus).cuda()
 
     if args.resume:
+
+        print("trying to load a nonexistent checkpoint")
+
         if os.path.isfile(args.resume):
             print(("=> loading checkpoint '{}'".format(args.resume)))
             checkpoint = torch.load(args.resume)
@@ -69,10 +76,10 @@ def main():
         data_length = 5
 
     train_loader = torch.utils.data.DataLoader(
-        TSNDataSet("", args.train_list, num_segments=args.num_segments,
+        TSNDataSet(args.dataset_path, args.train_list, num_segments=args.num_segments,
                    new_length=data_length,
                    modality=args.modality,
-                   image_tmpl="img_{:05d}.jpg" if args.modality in ["RGB", "RGBDiff"] else args.flow_prefix+"{}_{:05d}.jpg",
+                   image_tmpl="{:05d}_img.png" if args.modality in ["RGB", "RGBDiff"] else "{:05d}_"+args.flow_prefix+".png",
                    transform=torchvision.transforms.Compose([
                        train_augmentation,
                        Stack(roll=args.arch == 'BNInception'),
@@ -83,10 +90,10 @@ def main():
         num_workers=args.workers, pin_memory=True)
 
     val_loader = torch.utils.data.DataLoader(
-        TSNDataSet("", args.val_list, num_segments=args.num_segments,
+        TSNDataSet(args.dataset_path, args.val_list, num_segments=args.num_segments,
                    new_length=data_length,
                    modality=args.modality,
-                   image_tmpl="img_{:05d}.jpg" if args.modality in ["RGB", "RGBDiff"] else args.flow_prefix+"{}_{:05d}.jpg",
+                   image_tmpl="{:05d}_img.png" if args.modality in ["RGB", "RGBDiff"] else "{:05d}_"+args.flow_prefix+".png",
                    random_shift=False,
                    transform=torchvision.transforms.Compose([
                        GroupScale(int(scale_size)),
@@ -155,6 +162,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     end = time.time()
     for i, (input, target) in enumerate(train_loader):
+
+        print(i)
+
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -167,10 +177,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss
-        prec1, prec5 = accuracy(output.data, target, topk=(1,5))
-        losses.update(loss.data[0], input.size(0))
-        top1.update(prec1[0], input.size(0))
-        top5.update(prec5[0], input.size(0))
+        prec1, prec5 = accuracy(output.data, target, topk=(1,2))
+        losses.update(loss.data.item(), input.size(0))
+        top1.update(prec1.item(), input.size(0))
+        top5.update(prec5.item(), input.size(0))
 
 
         # compute gradient and do SGD step
@@ -199,6 +209,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
                    epoch, i, len(train_loader), batch_time=batch_time,
                    data_time=data_time, loss=losses, top1=top1, top5=top5, lr=optimizer.param_groups[-1]['lr'])))
 
+        del output
+        del loss
 
 def validate(val_loader, model, criterion, iter, logger=None):
     batch_time = AverageMeter()
@@ -214,17 +226,17 @@ def validate(val_loader, model, criterion, iter, logger=None):
         target = target.cuda(async=True)
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target, volatile=True)
-
+        
         # compute output
         output = model(input_var)
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss
-        prec1, prec5 = accuracy(output.data, target, topk=(1,5))
+        prec1, prec5 = accuracy(output.data, target, topk=(1,2))
 
-        losses.update(loss.data[0], input.size(0))
-        top1.update(prec1[0], input.size(0))
-        top5.update(prec5[0], input.size(0))
+        losses.update(loss.data.item(), input.size(0))
+        top1.update(prec1.item(), input.size(0))
+        top5.update(prec5.item(), input.size(0))
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -239,6 +251,9 @@ def validate(val_loader, model, criterion, iter, logger=None):
                    i, len(val_loader), batch_time=batch_time, loss=losses,
                    top1=top1, top5=top5)))
 
+        del output
+        del loss
+            
     print(('Testing Results: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'
           .format(top1=top1, top5=top5, loss=losses)))
 
@@ -286,6 +301,8 @@ def accuracy(output, target, topk=(1,)):
     maxk = max(topk)
     batch_size = target.size(0)
 
+    #print("Output size: " + str(output.size()))
+    
     _, pred = output.topk(maxk, 1, True, True)
     pred = pred.t()
     correct = pred.eq(target.view(1, -1).expand_as(pred))
