@@ -14,8 +14,9 @@ from ops import ConsensusModule
 # options
 parser = argparse.ArgumentParser(
     description="Standard video-level testing")
-parser.add_argument('dataset', type=str, choices=['ucf101', 'hmdb51', 'kinetics'])
+parser.add_argument('dataset', type=str, choices=['ucf101', 'hmdb51', 'kinetics', 'syn_home'])
 parser.add_argument('modality', type=str, choices=['RGB', 'Flow', 'RGBDiff'])
+parser.add_argument('dataset_path', type=str)
 parser.add_argument('test_list', type=str)
 parser.add_argument('weights', type=str)
 parser.add_argument('--arch', type=str, default="resnet101")
@@ -27,7 +28,7 @@ parser.add_argument('--input_size', type=int, default=224)
 parser.add_argument('--crop_fusion_type', type=str, default='avg',
                     choices=['avg', 'max', 'topk'])
 parser.add_argument('--k', type=int, default=3)
-parser.add_argument('--dropout', type=float, default=0.7)
+parser.add_argument('--dropout', type=float, default=0.0)
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--gpus', nargs='+', type=int, default=None)
@@ -42,6 +43,8 @@ elif args.dataset == 'hmdb51':
     num_class = 51
 elif args.dataset == 'kinetics':
     num_class = 400
+elif args.dataset == 'syn_home':
+    num_class = 2
 else:
     raise ValueError('Unknown dataset '+args.dataset)
 
@@ -53,7 +56,10 @@ net = TSN(num_class, 1, args.modality,
 checkpoint = torch.load(args.weights)
 print("model epoch {} best prec@1: {}".format(checkpoint['epoch'], checkpoint['best_prec1']))
 
+#print(checkpoint["state_dict"].keys())
 base_dict = {'.'.join(k.split('.')[1:]): v for k,v in list(checkpoint['state_dict'].items())}
+base_dict['base_model.fc.weight'] = base_dict.pop('new_fc.weight')
+base_dict['base_model.fc.bias'] = base_dict.pop('new_fc.bias')
 net.load_state_dict(base_dict)
 
 if args.test_crops == 1:
@@ -69,10 +75,10 @@ else:
     raise ValueError("Only 1 and 10 crops are supported while we got {}".format(args.test_crops))
 
 data_loader = torch.utils.data.DataLoader(
-        TSNDataSet("", args.test_list, num_segments=args.test_segments,
+        TSNDataSet(args.dataset_path, args.test_list, num_segments=args.test_segments,
                    new_length=1 if args.modality == "RGB" else 5,
                    modality=args.modality,
-                   image_tmpl="img_{:05d}.jpg" if args.modality in ['RGB', 'RGBDiff'] else args.flow_prefix+"{}_{:05d}.jpg",
+                   image_tmpl="{:05d}_img.png" if args.modality in ["RGB", "RGBDiff"] else "{:05d}_"+args.flow_prefix+".png",
                    test_mode=True,
                    transform=torchvision.transforms.Compose([
                        cropping,

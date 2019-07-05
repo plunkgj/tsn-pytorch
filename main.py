@@ -182,7 +182,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
         top1.update(prec1.item(), input.size(0))
         top5.update(prec5.item(), input.size(0))
 
-
         # compute gradient and do SGD step
         optimizer.zero_grad()
 
